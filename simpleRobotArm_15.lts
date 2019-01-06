@@ -1,0 +1,43 @@
+
+set Controllable={ready,supplyA,supplyB,supplyC,supplyD,supplyE,supplyF,supplyG,supplyH,supplyI,supplyJ,supplyK,supplyL,supplyM,supplyN,supplyO/**/}
+ENV=(ready->CONSUME),
+CONSUME=(consumeA->EXIT|consumeB->EXIT|consumeC->EXIT|consumeD->EXIT|consumeE->EXIT|consumeF->EXIT|consumeG->EXIT|
+		consumeH->EXIT|consumeI->EXIT|consumeJ->EXIT|consumeK->EXIT|consumeL->EXIT|consumeM->EXIT|consumeN->EXIT|consumeO->EXIT/**/),
+MARICIOUS=(/*consumeA->EXIT|*/consumeB->EXIT|exit->CONSUMED),
+EXIT=(exit->CONSUMED),
+CONSUMED=(supplyA->ENV|supplyB->ENV|supplyC->ENV|supplyD->ENV|supplyE->ENV|supplyF->ENV|supplyG->ENV
+		|supplyH->ENV|supplyI->ENV|supplyJ->ENV|supplyK->ENV|supplyL->ENV|supplyM->ENV|supplyN->ENV|supplyO->ENV/**/).
+
+//ENV=(a->(b->d->ENV|c->d->ENV|d->ENV)).
+
+Cont=(start->consumeA->supplyA->ENV).
+
+//ltl_property NOT_TWICE_B=[](b->X(!b W e))
+//ltl_property NOT_TWICE_C=[](c->X(!c W e))
+ltl_property A=[](consumeA->X(!consumeA W supplyA))
+ltl_property B=[](consumeB->X(!consumeB W supplyB))
+ltl_property C=[](consumeC->X(!consumeC W supplyC))
+ltl_property D=[](consumeD->X(!consumeD W supplyD))
+ltl_property E=[](consumeE->X(!consumeE W supplyE))
+ltl_property F=[](consumeF->X(!consumeF W supplyF))
+ltl_property G=[](consumeG->X(!consumeG W supplyG))
+ltl_property H=[](consumeH->X(!consumeH W supplyH))
+ltl_property I=[](consumeI->X(!consumeI W supplyI))
+ltl_property J=[](consumeJ->X(!consumeJ W supplyJ))
+ltl_property K=[](consumeK->X(!consumeK W supplyK))
+ltl_property L=[](consumeL->X(!consumeL W supplyL))
+ltl_property M=[](consumeM->X(!consumeM W supplyM))
+ltl_property N=[](consumeN->X(!consumeN W supplyN))
+ltl_property O=[](consumeO->X(!consumeO W supplyO))
+
+
+controllerSpec CONT = {
+safety = {
+//B_BEFORE_D,C_BEFORE_D,
+	A,B,C,D,E,F,G,H,I,J,K,L,M,N,O
+	}
+	controllable = {Controllable}
+}
+
+
+controller ||CC = (ENV)~{CONT}~(Cont).
