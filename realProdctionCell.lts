@@ -1,0 +1,130 @@
+/**
+Production cell - real case -
+	Overview
+		Robot arm (Arm):moving a material among places		 
+			Feed place (AtFeed):
+				The robot arm take an unprocessed material from here
+			Processing place (AtProcess[i])
+				The robot arm puts and processes a material with processing machine
+				(Processors are numbered )
+			Out place (AtOut):		
+		Processors at processing places(Process)
+			It receives process action from the robot arm.
+			It notifies the robot arm when it finishes processing.
+	
+	Environment model: It mainly models behaviors of a robot arm of a processing system
+		-The robot arm starts from the feed place and receive a request (reqA or reqB).
+		-The robot arm moves, handles a material (pickup/putdown) and process in each place.
+		-The robot arm can notify the finishing processing by "reset" action.
+	
+	Safety properties:
+		PROCESS_RULE: basic processing rule as below
+			Processors processes only when a material is placed.
+			Processors must not process a material twice.
+		HANDLE: basic material handling rule as below
+			The robot arm must not try to pick when a material is placed there.
+			The robot arm must not pick a material from "out place".
+			The robot arm must not put a material on "in place".
+		NO_PICK_PROCESSING,
+			The robot arm must not pick a material from a processing place while processing.			
+		PROCESS_A,
+			A material must be processed by processor[0] when the robot arm received "reqA".
+		PROCESS_B,
+			A material must be processed by processor[1] when the robot arm received "reqB".
+		MUST_PROCESS
+			The robot arm must not reset until a processed material is placed on the out place.
+		INITIAL_RULE,
+			This is a part of HANDLE. 
+		NOMEANMOVE,
+			The robot arm must not move among places unmeaningfully.
+		NO_ENTER_FEED,
+			Once the robot arm receives a request, it must not return to the feed place until it puts a processed material on the out place. 
+		TRANSFER,
+			The robot arm must not try to pick a material when it has already picked.
+			The robot arm must not try to put a material when it doesn't have a material.
+			
+!In our evaluation, we generate analysis space by adding the above propeties. 
+ we add them in order (from PROCESS_RULE to TRANSFER).
+
+
+!Note that here is another process named "Cont".
+ It is a controller of the system which is required in our previous work.
+ It is used to identify guaranteeable safety proeprty at runtime.
+ However, it has no influence on analysis space reduction.
+
+		
+**/
+const N=1
+set Requests={reqA,reqB}
+set MOVE={move[0..N],moveOut,moveFeed}
+set Controllable={pickup,putdown,MOVE,process[0..N],reset}//*/}
+
+
+Arm = (Requests->AtFeed),
+AtFeed = (
+	pickup->picksuccess->AtFeed|
+	putdown->putsuccess->AtFeed|
+	move[i:0..N]->AtProcess[i]|
+	moveOut->AtOut|
+	reset->Arm),
+AtProcess[i:0..N]=(
+	pickup->picksuccess->AtProcess[i]|
+	putdown->putsuccess->AtProcess[i]|
+	process[i]->AtProcess[i]|
+	move[j:0..N]->AtProcess[j]|
+	moveFeed->AtFeed|
+	moveOut->AtOut),
+AtOut=(
+	pickup->picksuccess->AtOut|
+	putdown->putsuccess->AtOut|
+	moveFeed->AtFeed|
+	move[i:0..N]->AtProcess[i]).
+
+Process(I=0)=(process[I]->(process[I].end->Process)).
+
+Cont=(reqB->pickup->picksuccess->move[1]->putdown->putsuccess->process[1]->process[1].end->pickup->picksuccess->moveOut->putdown->putsuccess->moveFeed->reset->Cont).
+
+
+fluent PROCESSING[i:0..N]=<process[i],process[i].end>
+fluent PROCESSED[i:0..N]=<process[i].end,reset> 
+fluent AT_PROCESS[i:0..N]=<move[i],MOVE\{move[i]}>
+fluent PICKED =<picksuccess,putsuccess>
+fluent PUTTED =<putsuccess,picksuccess>initially 1
+fluent AT_OUT =<moveOut,MOVE\{moveOut}>
+fluent AT_FEED =<moveFeed,MOVE\{moveFeed}> initially 1
+
+ltl_property PROCESSING_RULE=[]forall[i:0..N]((process[i].end->X(!process[i] W (AT_PROCESS[i]&&putsuccess)))&&!(PROCESSING[i]&&AT_PROCESS[i]&&putsuccess)&&(process[i]->X(!process[i] W reset)))
+ltl_property HANDLE=[]((putsuccess->X{Controllable}\{pickup}&&!pickup)&&(picksuccess->X{Controllable}\{putdown}&&!putdown)&&(pickup->PUTTED)&&(putdown->PICKED)&&!(AT_FEED&&putdown)&&!(AT_OUT&&pickup)&&forall[i:0..N]((AT_PROCESS[i]&&pickup)->X(!(AT_PROCESS[i]&&pickup)W(AT_PROCESS[i]&&putsuccess)))) 
+ltl_property NO_PICK_PROCESSING=[]forall[i:0..N](!(PROCESSING[i]&&AT_PROCESS[i]&&picksuccess))
+ltl_property PROCESS_A=[](reqA->X((!reset W process[0].end)&&(!process[1].end W reset)&&((((putdown&&AT_OUT)->PROCESSED[0])W reset))))
+ltl_property PROCESS_B=[](reqB->X((!reset W process[1].end)&&(!process[0].end W reset)&&((((putdown&&AT_OUT)->PROCESSED[1])W reset))))
+ltl_property MUST_PROCESS=[]((moveOut->X(AT_OUT W putsuccess))&&(moveFeed->X(AT_FEED W picksuccess))&&(moveFeed->X(!pickup W reset))&&(forall[i:0..N](move[i]->X(AT_PROCESS[i] W process[i]))))
+ltl_property INITIAL_RULE=forall[i:0..N]((!process[i] W (AT_PROCESS[i]&&putsuccess))&&(!(AT_PROCESS[i]&&pickup)W(AT_PROCESS[i]&&putsuccess)))
+ltl_property NOMEANMOVE=[]((forall[i:0..N]!(X move[i]&&AT_PROCESS[i]))&&({MOVE}-> X(!{MOVE}W {Controllable}\{MOVE})))
+ltl_property NO_ENTER_FEED=[]({Requests}->X((!moveFeed W (AT_OUT&&putsuccess))))
+ltl_property TRANSFER=[]((pickup->!PICKED)&&(putdown->!PUTTED))
+
+
+
+
+||ENV= (Arm||forall[i:0..N](Process(i))).
+
+controllerSpec CONT = {
+safety = {
+	PROCESSING_RULE,
+	HANDLE,
+	NO_PICK_PROCESSING,
+	PROCESS_A,
+	PROCESS_B,
+	MUST_PROCESS,
+	INITIAL_RULE,
+	NOMEANMOVE,
+	NO_ENTER_FEED,
+	TRANSFER
+	}
+	controllable = {Controllable}
+}
+
+
+controller ||CC = (ENV)~{CONT}~(Cont).
+||CCC=CC.
